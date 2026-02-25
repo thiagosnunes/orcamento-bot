@@ -149,7 +149,7 @@ def processar_mensagem(texto):
 
 @app.route("/", methods=["GET"])
 def home():
-    return 200
+    return "online"
 
 @app.route("/", methods=["POST"])
 def receber_mensagem():
