@@ -78,6 +78,10 @@ def processar_mensagem(texto):
         "Categoria": categoria
     }, None
 
+@app.route("/", methods=["GET"])
+def home():
+    return "online"
+
 @app.route("/", methods=["POST"])
 def receber_mensagem():
     dados = request.json
