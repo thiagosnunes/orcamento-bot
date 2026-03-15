@@ -14,39 +14,53 @@ file_id = os.getenv("FILE_ID")
 tenant = "common"
 
 
-def enviar_botoes_categoria(chat_id):
+def enviar_botoes_categoria(chat_id, tipo):
 
-    botoes = {
-        "inline_keyboard": [
-            [
-                {"text": "🏠 Moradia", "callback_data": "Moradia"},
-                {"text": "❤️ Doação", "callback_data": "Doacao"}
-            ],
-            [
-                {"text": "🍔 Alimentação", "callback_data": "Alimentacao"},
-                {"text": "🧴 C. Pessoais", "callback_data": "C. Pessoais"}
-            ],
-            [
-                {"text": "🚌 Transporte", "callback_data": "Transporte"},
-                {"text": "🎓 Educação", "callback_data": "Educacao"}
-            ],
-            [
-                {"text": "🛍 Compras", "callback_data": "Compras"},
-                {"text": "📄 Taxas", "callback_data": "Taxas"}
-            ],
-            [
-                {"text": "💳 Dívida", "callback_data": "Divida"},
-                {"text": "🎮 Lazer", "callback_data": "Lazer"}
-            ],
-            [
-                {"text": "🏥 Saúde", "callback_data": "Saude"},
-                {"text": "📦 Outros", "callback_data": "Outros"}
-            ],
-            [
-                {"text": "🚀 Empreendimento", "callback_data": "Empreendimento"}
+    if tipo == 1:
+        botoes = {
+            "inline_keyboard": [
+                [
+                    {"text": "🏠 Moradia", "callback_data": "Moradia"},
+                    {"text": "❤️ Doação", "callback_data": "Doacao"}
+                ],
+                [
+                    {"text": "🍔 Alimentação", "callback_data": "Alimentacao"},
+                    {"text": "🧴 C. Pessoais", "callback_data": "C. Pessoais"}
+                ],
+                [
+                    {"text": "🚌 Transporte", "callback_data": "Transporte"},
+                    {"text": "🎓 Educação", "callback_data": "Educacao"}
+                ],
+                [
+                    {"text": "🛍 Compras", "callback_data": "Compras"},
+                    {"text": "📄 Taxas", "callback_data": "Taxas"}
+                ],
+                [
+                    {"text": "💳 Dívida", "callback_data": "Divida"},
+                    {"text": "🎮 Lazer", "callback_data": "Lazer"}
+                ],
+                [
+                    {"text": "🏥 Saúde", "callback_data": "Saude"},
+                    {"text": "📦 Outros", "callback_data": "Outros"}
+                ],
+                [
+                    {"text": "🚀 Empreendimento", "callback_data": "Empreendimento"}
+                ]
             ]
-        ]
-    }
+        }
+    else:
+        botoes = {
+            "inline_keyboard": [
+                [
+                    {"text": "Bradesco", "callback_data": "Bradesco"},
+                    {"text": "Danishoes", "callback_data": "Danishoes"}
+                ],
+                [
+                    {"text": "Pensão", "callback_data": "Pensão"},
+                    {"text": "Outros", "callback_data": "Outros"}
+                ]
+            ]
+        }
 
     requests.post(
         f"https://api.telegram.org/bot{TOKEN}/sendMessage",
@@ -81,6 +95,26 @@ def enviar_botoes_pagamento(chat_id):
         }
     )
 
+def enviar_botoes_tipo(chat_id):
+
+    botoes = {
+        "inline_keyboard": [
+            [
+                {"text": "🟢 Entrada", "callback_data": "Entrada"},
+                {"text": "🔴 Saída", "callback_data": "Saída"}
+            ]
+        ]
+    }
+
+    requests.post(
+        f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+        json={
+            "chat_id": chat_id,
+            "text": "Escolha o tipo de lançamento:",
+            "reply_markup": botoes
+        }
+    )
+
 
 def adicionar_no_excel(registro):
 
@@ -109,6 +143,7 @@ def adicionar_no_excel(registro):
     data = {
         "values": [[
             registro["Data"],
+            registro["Tipo"],
             registro["Nome"],
             registro["Valor"],
             registro["Pagamento"],
@@ -121,31 +156,32 @@ def adicionar_no_excel(registro):
     return response.status_code, response.text
 
 
-def processar_mensagem(texto):
-    partes = [p.strip() for p in texto.split(",")]
-
-    if len(partes) != 4:
-        return None, f'Formato inválido "{texto}". Use: Nome, Valor, Pagamento, Categoria'
-
-    nome = partes[0]
-
-    try:
-        valor = float(partes[1].replace(",", "."))
-    except:
-        return None, f'Valor inválido "{partes[1]}".'
-
-    pagamento = partes[2]
-    categoria = partes[3]
-
-    data_hoje = datetime.datetime.now().strftime("%Y-%m-%d")
-
-    return {
-        "Data": data_hoje,
-        "Nome": nome,
-        "Valor": valor,
-        "Pagamento": pagamento,
-        "Categoria": categoria
-    }, None
+# def processar_mensagem(texto):
+#     partes = [p.strip() for p in texto.split(",")]
+#
+#     if len(partes) != 4:
+#         return None, f'Formato inválido "{texto}". Use: Nome, Valor, Pagamento, Categoria'
+#
+#     nome = partes[0]
+#
+#     try:
+#         valor = float(partes[1].replace(",", "."))
+#     except:
+#         return None, f'Valor inválido "{partes[1]}".'
+#
+#     pagamento = partes[2]
+#     categoria = partes[3]
+#
+#     data_hoje = datetime.datetime.now().strftime("%Y-%m-%d")
+#
+#     return {
+#         "Data": data_hoje,
+#         "Tipo": "Saída",
+#         "Nome": nome,
+#         "Valor": valor,
+#         "Pagamento": pagamento,
+#         "Categoria": categoria
+#     }, None
 
 @app.route("/", methods=["GET"])
 def home():
@@ -164,13 +200,25 @@ def receber_mensagem():
         if chat_id in user_states:
             estado = user_states[chat_id]
 
-            if estado["step"] == "pagamento":
+            if estado["step"] == "tipo":
+                estado["Tipo"] = escolha
+                estado["step"] = "nome"
+                resposta = "Qual o nome?"
+
+                requests.post(
+                    f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+                    json={
+                        "chat_id": chat_id,
+                        "text": resposta
+                    }
+                )
+
+            elif estado["step"] == "pagamento":
                 estado["Pagamento"] = escolha
                 estado["step"] = "categoria"
-                enviar_botoes_categoria(chat_id)
+                enviar_botoes_categoria(chat_id, 1)
 
             elif estado["step"] == "categoria":
-
                 estado["Categoria"] = escolha
                 estado["Data"] = datetime.datetime.now().strftime("%Y-%m-%d")
 
@@ -202,8 +250,9 @@ def receber_mensagem():
 
     # Inicia fluxo assistente
     if texto == "/add":
-        user_states[chat_id] = {"step": "nome"}
-        resposta = "Qual foi a compra?"
+        user_states[chat_id] = {"step": "tipo"}
+        enviar_botoes_tipo(chat_id)
+        return "ok"
 
     # Se usuário já está em fluxo
     elif chat_id in user_states:
@@ -218,14 +267,20 @@ def receber_mensagem():
         elif estado["step"] == "valor":
             try:
                 estado["Valor"] = float(texto.replace(",", "."))
-                estado["step"] = "pagamento"
-                enviar_botoes_pagamento(chat_id)
-                return "ok"
+                if estado["Tipo"] == "Entrada":
+                    estado["Pagamento"] = "PIX"
+                    estado["step"] = "categoria"
+                    enviar_botoes_categoria(chat_id, 2)
+                    return "ok"
+                else:
+                    estado["step"] = "pagamento"
+                    enviar_botoes_pagamento(chat_id)
+                    return "ok"
             except:
                 resposta = "Valor inválido. Digite apenas número."
 
     else:
-        resposta = "Digite /add para registrar um gasto."
+        resposta = "Digite /add para registrar um lançamento."
 
     requests.post(
         f"https://api.telegram.org/bot{TOKEN}/sendMessage",
