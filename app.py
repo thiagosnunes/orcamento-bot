@@ -20,7 +20,7 @@ tenant = "common"
 
 
 ia_client = InferenceClient(
-    api_key=HF_TOKEN
+    token=HF_TOKEN
 )
 
 
