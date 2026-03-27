@@ -2,6 +2,9 @@ from flask import Flask, request
 import requests
 import datetime
 import os
+import json
+from huggingface_hub import InferenceClient
+
 
 user_states = {}
 app = Flask(__name__)
@@ -11,109 +14,14 @@ client_id = os.getenv("CLIENT_ID")
 client_secret = os.getenv("CLIENT_SECRET")
 refresh_token = os.getenv("REFRESH_TOKEN")
 file_id = os.getenv("FILE_ID")
+HF_TOKEN = os.getenv("IA_TOKEN")
+tenant_id = os.getenv("TENANT_ID")
 tenant = "common"
 
 
-def enviar_botoes_categoria(chat_id, tipo):
-
-    if tipo == 1:
-        botoes = {
-            "inline_keyboard": [
-                [
-                    {"text": "🏠 Moradia", "callback_data": "Moradia"},
-                    {"text": "❤️ Doação", "callback_data": "Doacao"}
-                ],
-                [
-                    {"text": "🍔 Alimentação", "callback_data": "Alimentacao"},
-                    {"text": "🧴 C. Pessoais", "callback_data": "C. Pessoais"}
-                ],
-                [
-                    {"text": "🚌 Transporte", "callback_data": "Transporte"},
-                    {"text": "🎓 Educação", "callback_data": "Educacao"}
-                ],
-                [
-                    {"text": "🛍 Compras", "callback_data": "Compras"},
-                    {"text": "📄 Taxas", "callback_data": "Taxas"}
-                ],
-                [
-                    {"text": "💳 Dívida", "callback_data": "Divida"},
-                    {"text": "🎮 Lazer", "callback_data": "Lazer"}
-                ],
-                [
-                    {"text": "🏥 Saúde", "callback_data": "Saude"},
-                    {"text": "📦 Outros", "callback_data": "Outros"}
-                ],
-                [
-                    {"text": "🚀 Empreendimento", "callback_data": "Empreendimento"}
-                ]
-            ]
-        }
-    else:
-        botoes = {
-            "inline_keyboard": [
-                [
-                    {"text": "Bradesco", "callback_data": "Bradesco"},
-                    {"text": "Danishoes", "callback_data": "Danishoes"}
-                ],
-                [
-                    {"text": "Pensão", "callback_data": "Pensão"},
-                    {"text": "Outros", "callback_data": "Outros"}
-                ]
-            ]
-        }
-
-    requests.post(
-        f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": "Escolha a categoria:",
-            "reply_markup": botoes
-        }
-    )
-
-def enviar_botoes_pagamento(chat_id):
-
-    botoes = {
-        "inline_keyboard": [
-            [
-                {"text": "💵 Dinheiro", "callback_data": "Dinheiro"},
-                {"text": "⚡ PIX", "callback_data": "PIX"}
-            ],
-            [
-                {"text": "💳 Crédito", "callback_data": "Credito"},
-                {"text": "🏦 Débito", "callback_data": "Debito"}
-            ]
-        ]
-    }
-
-    requests.post(
-        f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": "Escolha a forma de pagamento:",
-            "reply_markup": botoes
-        }
-    )
-
-def enviar_botoes_tipo(chat_id):
-
-    botoes = {
-        "inline_keyboard": [
-            [
-                {"text": "🟢 Entrada", "callback_data": "Entrada"},
-                {"text": "🔴 Saída", "callback_data": "Saída"}
-            ]
-        ]
-    }
-
-    requests.post(
-        f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": "Escolha o tipo de lançamento:",
-            "reply_markup": botoes
-        }
-    )
+ia_client = InferenceClient(
+    api_key=HF_TOKEN
+)
 
 
 def adicionar_no_excel(registro):
@@ -156,32 +64,78 @@ def adicionar_no_excel(registro):
     return response.status_code, response.text
 
 
-# def processar_mensagem(texto):
-#     partes = [p.strip() for p in texto.split(",")]
-#
-#     if len(partes) != 4:
-#         return None, f'Formato inválido "{texto}". Use: Nome, Valor, Pagamento, Categoria'
-#
-#     nome = partes[0]
-#
-#     try:
-#         valor = float(partes[1].replace(",", "."))
-#     except:
-#         return None, f'Valor inválido "{partes[1]}".'
-#
-#     pagamento = partes[2]
-#     categoria = partes[3]
-#
-#     data_hoje = datetime.datetime.now().strftime("%Y-%m-%d")
-#
-#     return {
-#         "Data": data_hoje,
-#         "Tipo": "Saída",
-#         "Nome": nome,
-#         "Valor": valor,
-#         "Pagamento": pagamento,
-#         "Categoria": categoria
-#     }, None
+def interpretar_gasto(texto):
+
+    try:
+
+        resposta = ia_client.chat_completion(
+            model="meta-llama/Meta-Llama-3-8B-Instruct",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """
+Você recebe frases de gastos financeiros.
+Resposta sem forma de pagamento considere como PIX.
+Acate apenas as mensagem que tiver no minimo o nome e valor.
+Responda SOMENTE em JSON válido.
+
+Formato:
+
+{
+ "nome": "...",
+ "valor": numero,
+ "pagamento": "...",
+ "categoria": "..."
+}
+
+Pagamentos possíveis:
+Dinheiro
+PIX
+Credito
+Debito
+
+Categorias possíveis:
+Moradia
+Doação
+Alimentação
+C. Pessoais
+Transporte
+Educação
+Compras
+Taxas
+Dívida
+Lazer
+Saúde
+Outros
+Empreendimento
+"""
+                },
+                {
+                    "role": "user",
+                    "content": texto
+                }
+            ],
+            max_tokens=200
+        )
+
+        resposta_texto = resposta.choices[0].message.content
+
+        dados = json.loads(resposta_texto)
+
+        data_hoje = datetime.datetime.now().strftime("%Y-%m-%d")
+
+        return {
+            "Data": data_hoje,
+            "Tipo": "Saída",
+            "Nome": dados["nome"],
+            "Valor": float(dados["valor"]),
+            "Pagamento": dados["pagamento"],
+            "Categoria": dados["categoria"]
+        }
+
+    except Exception as e:
+        print("Erro IA:", e)
+        return None
 
 @app.route("/", methods=["GET"])
 def home():
@@ -189,98 +143,45 @@ def home():
 
 @app.route("/", methods=["POST"])
 def receber_mensagem():
+
     dados = request.json
-
-    if "callback_query" in dados:
-
-        callback = dados["callback_query"]
-        chat_id = callback["message"]["chat"]["id"]
-        escolha = callback["data"]
-
-        if chat_id in user_states:
-            estado = user_states[chat_id]
-
-            if estado["step"] == "tipo":
-                estado["Tipo"] = escolha
-                estado["step"] = "nome"
-                resposta = "Qual o nome?"
-
-                requests.post(
-                    f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-                    json={
-                        "chat_id": chat_id,
-                        "text": resposta
-                    }
-                )
-
-            elif estado["step"] == "pagamento":
-                estado["Pagamento"] = escolha
-                estado["step"] = "categoria"
-                enviar_botoes_categoria(chat_id, 1)
-
-            elif estado["step"] == "categoria":
-                estado["Categoria"] = escolha
-                estado["Data"] = datetime.datetime.now().strftime("%Y-%m-%d")
-
-                adicionar_no_excel(estado)
-
-                requests.post(
-                    f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-                    json={
-                        "chat_id": chat_id,
-                        "text": "✅ Gasto registrado com sucesso!\nDigite /add para registrar novo gasto."
-                    }
-                )
-
-                del user_states[chat_id]
-
-        # necessário para remover o loading do botão
-        requests.post(
-            f"https://api.telegram.org/bot{TOKEN}/answerCallbackQuery",
-            json={"callback_query_id": callback["id"]}
-        )
-
-        return "ok"
 
     if "message" not in dados:
         return "ok"
 
     chat_id = dados["message"]["chat"]["id"]
-    texto = dados["message"]["text"].strip()
+    texto = dados["message"]["text"]
 
-    # Inicia fluxo assistente
-    if texto == "/add":
-        user_states[chat_id] = {"step": "tipo"}
-        enviar_botoes_tipo(chat_id)
-        return "ok"
+    registro = interpretar_gasto(texto)
 
-    # Se usuário já está em fluxo
-    elif chat_id in user_states:
+    print(registro)
 
-        estado = user_states[chat_id]
+    if registro:
 
-        if estado["step"] == "nome":
-            estado["Nome"] = texto
-            estado["step"] = "valor"
-            resposta = "Qual o valor?"
+        status, resposta_excel = adicionar_no_excel(registro)
 
-        elif estado["step"] == "valor":
-            try:
-                estado["Valor"] = float(texto.replace(",", "."))
-                if estado["Tipo"] == "Entrada":
-                    estado["Pagamento"] = "PIX"
-                    estado["step"] = "categoria"
-                    enviar_botoes_categoria(chat_id, 2)
-                    return "ok"
-                else:
-                    estado["step"] = "pagamento"
-                    enviar_botoes_pagamento(chat_id)
-                    return "ok"
-            except:
-                resposta = "Valor inválido. Digite apenas número."
+        if status == 201:
+
+            resposta = (
+                f"✅ Gasto registrado\n\n"
+                f"Nome: {registro['Nome']}\n"
+                f"Valor: {registro['Valor']}\n"
+                f"Pagamento: {registro['Pagamento']}\n"
+                f"Categoria: {registro['Categoria']}"
+            )
+
+        else:
+            resposta = "Erro ao gravar no Excel."
 
     else:
-        resposta = "Digite /add para registrar um lançamento."
+
+        resposta = (
+            "❌ Não consegui entender.\n\n"
+            "Exemplos:\n"
+            "uber 35 credito\n"
+            "mercado 120 pix\n"
+            "farmacia 40 debito"
+        )
 
     requests.post(
         f"https://api.telegram.org/bot{TOKEN}/sendMessage",
