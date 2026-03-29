@@ -106,8 +106,11 @@ Valores:
 - Sempre número (ex: 35.90)
 - Não invente valores
 
-Categorias possíveis:
+Categorias possíveis Tipo Saída:
 Moradia, Doacao, Alimentacao, C. Pessoais, Transporte, Educacao, Compras, Taxas, Divida, Lazer, Saude, Outros, Empreendimento
+
+Categorias possíveis Tipo Entrada:
+Bradesco, DaniShoes, Pensão, Investimento, Mariazinha, Imposto de renda, Sinopress, Empreendedorismo, Outros
 
 - Escolha a mais apropriada
 - Se não souber → "Outros"
