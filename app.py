@@ -4,6 +4,7 @@ import datetime
 import os
 import json
 from huggingface_hub import InferenceClient
+import re
 
 
 user_states = {}
@@ -23,6 +24,18 @@ ia_client = InferenceClient(
     token=HF_TOKEN
 )
 
+
+def mensagem_valida(texto):
+    texto = texto.lower()
+
+    # precisa ter número
+    tem_numero = bool(re.search(r"\d", texto))
+
+    # precisa ter pelo menos uma palavra com letra
+    tem_texto = bool(re.search(r"[a-zA-Z]", texto))
+
+    # return tem_numero and tem_texto
+    return True
 
 def adicionar_no_excel(registro):
 
@@ -63,8 +76,61 @@ def adicionar_no_excel(registro):
 
     return response.status_code, response.text
 
-
 def interpretar_gasto(texto):
+
+    try:
+        resposta = ia_client.chat_completion(
+            model="meta-llama/Meta-Llama-3-8B-Instruct",
+            messages=[
+                {
+                "role": "system",
+                "content": """
+Você é um assistente que extrai informações financeiras de mensagens.
+
+Regras obrigatórias:
+- Extraia os campos: Nome, Valor, Pagamento, Categoria
+- A mensagem só é válida se tiver Nome e Valor
+- Se não tiver Nome ou Valor → retorne: {"erro": "dados_insuficientes"}
+
+- Se não informar pagamento → use "PIX"
+- Valores devem ser números (ex: 35.90)
+- Não invente valores
+
+Categorias possíveis:
+Moradia, Doacao, Alimentacao, C. Pessoais, Transporte, Educacao, Compras, Taxas, Divida, Lazer, Saude, Outros, Empreendimento
+
+- Escolha a categoria mais apropriada
+- Se não souber → use "Outros"
+
+Responda SOMENTE em JSON válido, sem texto extra.
+
+Formato de saída:
+{
+  "Nome": "...",
+  "Valor": 0.0,
+  "Pagamento": "...",
+  "Categoria": "..."
+}
+"""
+            },
+            {
+                "role": "user",
+                "content": texto
+            }
+        ],
+        temperature=0.2,
+        max_tokens=200
+    )
+
+        return resposta.choices[0].message.content
+
+
+
+    except Exception as e:
+        print("Erro IA:", e)
+        return None
+
+def interpretar_gasto2(texto):
 
     try:
 
@@ -151,37 +217,61 @@ def receber_mensagem():
 
     chat_id = dados["message"]["chat"]["id"]
     texto = dados["message"]["text"]
+    print(texto)
 
-    registro = interpretar_gasto(texto)
-
-    print(registro)
-
-    if registro:
-
-        status, resposta_excel = adicionar_no_excel(registro)
-
-        if status == 201:
-
-            resposta = (
-                f"✅ Gasto registrado\n\n"
-                f"Nome: {registro['Nome']}\n"
-                f"Valor: {registro['Valor']}\n"
-                f"Pagamento: {registro['Pagamento']}\n"
-                f"Categoria: {registro['Categoria']}"
-            )
-
-        else:
-            resposta = "Erro ao gravar no Excel."
+    if not mensagem_valida(texto):
+        resposta = "Envie algo como: nome + valor (ex: 'uber 35')"
 
     else:
+        resposta_texto = interpretar_gasto(texto)
+        print(resposta_texto)
 
-        resposta = (
-            "❌ Não consegui entender.\n\n"
-            "Exemplos:\n"
-            "uber 35 credito\n"
-            "mercado 120 pix\n"
-            "farmacia 40 debito"
-        )
+        if resposta_texto:
+
+            if "erro" in resposta_texto:
+                resposta = "Não entendi. Envie pelo menos nome e valor."
+
+            else:
+
+                dados = json.loads(resposta_texto)
+
+                data_hoje = datetime.datetime.now().strftime("%Y-%m-%d")
+
+                print(dados)
+
+                registro = {
+                    "Data": data_hoje,
+                    "Tipo": "Saída",
+                    "Nome": dados["Nome"],
+                    "Valor": float(dados["Valor"]),
+                    "Pagamento": dados["Pagamento"],
+                    "Categoria": dados["Categoria"]
+                }
+
+                status, resposta_excel = adicionar_no_excel(registro)
+
+                if status == 201:
+
+                    resposta = (
+                        f"✅ Dados registrados\n\n"
+                        f"Nome: {registro['Nome']}\n"
+                        f"Valor: {registro['Valor']}\n"
+                        f"Pagamento: {registro['Pagamento']}\n"
+                        f"Categoria: {registro['Categoria']}"
+                    )
+
+                else:
+                    resposta = "Erro ao gravar no Excel."
+
+        else:
+
+            resposta = (
+                "❌ Não consegui entender.\n\n"
+                "Exemplos:\n"
+                "uber 35 credito\n"
+                "mercado 120 pix\n"
+                "farmacia 40 debito"
+            )
 
     requests.post(
         f"https://api.telegram.org/bot{TOKEN}/sendMessage",
