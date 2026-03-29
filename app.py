@@ -88,24 +88,35 @@ def interpretar_gasto(texto):
 Você é um assistente que extrai informações financeiras de mensagens.
 
 Regras obrigatórias:
-- Extraia os campos: Nome, Valor, Pagamento, Categoria
+- Extraia: Nome, Valor, Pagamento, Categoria, Tipo
 - A mensagem só é válida se tiver Nome e Valor
 - Se não tiver Nome ou Valor → retorne: {"erro": "dados_insuficientes"}
 
-- Se não informar pagamento → use "PIX"
-- Valores devem ser números (ex: 35.90)
+Classificação de Tipo:
+- "Entrada" → dinheiro recebido (ex: salário, pagamento recebido, venda, reembolso)
+- "Saída" → dinheiro gasto (ex: compras, contas, despesas)
+
+Regra importante:
+- Se não ficar claro → considerar como "Saída"
+
+Pagamento:
+- Se não informar → use "PIX"
+
+Valores:
+- Sempre número (ex: 35.90)
 - Não invente valores
 
 Categorias possíveis:
 Moradia, Doacao, Alimentacao, C. Pessoais, Transporte, Educacao, Compras, Taxas, Divida, Lazer, Saude, Outros, Empreendimento
 
-- Escolha a categoria mais apropriada
-- Se não souber → use "Outros"
+- Escolha a mais apropriada
+- Se não souber → "Outros"
 
-Responda SOMENTE em JSON válido, sem texto extra.
+Responda SOMENTE em JSON válido.
 
-Formato de saída:
+Formato:
 {
+  "Tipo": "...",
   "Nome": "...",
   "Valor": 0.0,
   "Pagamento": "...",
@@ -192,7 +203,7 @@ Empreendimento
 
         return {
             "Data": data_hoje,
-            "Tipo": "Saída",
+            "Tipo": dados["Tipo"],
             "Nome": dados["nome"],
             "Valor": float(dados["valor"]),
             "Pagamento": dados["pagamento"],
@@ -241,7 +252,7 @@ def receber_mensagem():
 
                 registro = {
                     "Data": data_hoje,
-                    "Tipo": "Saída",
+                    "Tipo": dados["Tipo"],
                     "Nome": dados["Nome"],
                     "Valor": float(dados["Valor"]),
                     "Pagamento": dados["Pagamento"],
@@ -253,7 +264,7 @@ def receber_mensagem():
                 if status == 201:
 
                     resposta = (
-                        f"✅ Dados registrados\n\n"
+                        f"✅ {registro['Tipo']} registrada\n\n"
                         f"Nome: {registro['Nome']}\n"
                         f"Valor: {registro['Valor']}\n"
                         f"Pagamento: {registro['Pagamento']}\n"
